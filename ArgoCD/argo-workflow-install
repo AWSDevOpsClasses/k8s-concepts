@@ -1,0 +1,91 @@
+1st method installation
+https://github.com/argoproj/argo-workflows/releases/
+kubectl create ns argo
+kubectl create namespace argo
+kubectl apply -n argo -f https://github.com/argoproj/argo-workflows/releases/download/v3.6.5/install.yaml
+kubectl get all -n argo
+kubectl -n argo port-forward service/argo-server 2746:2746
+https://localhost:2746/
+in git bash
+
+kubectl patch deployment \
+  argo-server \
+  --namespace argo \
+  --type='json' \
+  -p='[{"op": "replace", "path": "/spec/template/spec/containers/0/args", "value": [
+  "server",
+  "--auth-mode=server"
+]}]'
+
+argo submit -n argo --watch https://raw.githubusercontent.com/argoproj/argo-workflows/main/examples/hello-world.yaml
+error argo workflow failed for service account
+kubectl create rolebinding default-admin --clusterrole=admin --serviceaccount=argo:default -n argo
+===================================================================================
+2nd method installation
+https://argo-workflows.readthedocs.io/en/latest/access-token/
+kubectl create sa jenkins
+https://argo-workflows.readthedocs.io/en/latest/workflow-rbac/
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: argo
+  name: argo-workflows-access
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows"]
+  verbs: ["create", "patch", "get", "list", "watch"]
+https://github.com/argoproj/argo-workflows/blob/main/manifests/namespace-install/argo-server-rbac/argo-server-rolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argo-workflows-access-binding
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: jenkins    
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argo-workflows-access
+https://github.com/argoproj/argo-workflows/blob/main/manifests/cluster-install/workflow-controller-rbac/workflow-controller-clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: argo-workflows-cluster-access
+rules:
+- apiGroups: ["argoproj.io"]
+  resources: ["workflows", "workflowtemplates"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["pods", "pods/log"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["onfigmaps"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["persistentvolumeclaims" ]
+  verbs: ["create", "update", "delete", "get" ]
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: argo-workflows-access-binding
+  namespace: argo
+subjects:
+- kind: ServiceAccount
+  name: jenkins    
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argo-workflows-cluster-access
+https://argo-workflows.readthedocs.io/en/latest/service-account-secrets/
+apiVersion: v1
+kind: Secret
+metadata:
+  name: jenkins.service-account-token
+  namespace: argo
+  annotations:
+    kubernetes.io/service-account.name: jenkins
+type: kubernetes.io/service-account-token
+ARGO_TOKEN="Bearer $(kubectl get secret jenkins.service-account-token -o=jsonpath='{.data.token}' | base64 --decode)"
+echo $ARGO_TOKEN
